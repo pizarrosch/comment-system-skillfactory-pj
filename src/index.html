@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Comments page</title>
+  <link rel="stylesheet" href="index.css" type="text/css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  <script src="./main.js" defer></script>
+</head>
+<body>
+  <div class="chooseUsers"></div>
+  <div class="container">
+    <hr>
+    <div class="input-container">
+      <img src="images/user_1.png" width="61" height="61" alt=""/>
+      <div class="username-input-wrapper">
+        <div class="username-container">
+          <span class="user-name">Максим Авдеенко</span>
+          <span class="counter">Макс. 1000 символов</span>
+        </div>
+        <span class="error-message" style="display: none">Слишком длинное сообщение</span>
+        <input placeholder="Введите текст сообщения..." id="input"></input>
+      </div>
+      <button type='button' class="button">Отправить</button>
+    </div>
+    <div class="comments-container">
+      <div class="comment">
+        <img src="images/user%202.png" alt="" width="61" height="61">
+        <div class="userComment">
+          <div>
+            <span class="user-name">Алексей_1994b</span>
+            <span class="date">23.04 15:46</span>
+          </div>
+          <p>Самое обидное когда сценарий по сути есть - в виде книг, где нет сюжетных дыр, всё логично, стройное
+            повествование и достаточно взять и экранизировать оригинал как это было в первых фильмах с минимальным количеством
+            отсебятины и зритель с восторгом примет любой такой фильм и сериал, однако вместо этого 'Кольца власти' просто
+            позаимствовали имена из оригинала, куски истории, мало связанные между собой и выдали очередной среднячковый
+            сериал на один раз в лучшем случае.</p>
+          <div class="reaction-container">
+          <span class="respond">
+            <img src="./images/respond-icon.svg" alt="respond" width="26" height="25">
+            <span>Ответить</span>
+          </span>
+            <span class="addToFav">
+            <img src="./images/likeHeart-not-filled.svg" alt="" width="30" height="28">
+            <span>В избранном</span>
+          </span>
+            <div class="likes-counter">
+              <div class="minus">-</div>
+              <span class="initial">0</span>
+              <div class="plus">+</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="comment active">
+        <img src="images/user%202.png" alt="" width="61" height="61">
+        <div class="userComment">
+          <div>
+            <div class="respondee-container">
+              <span class="user-name">Алексей_1994b</span>
+              <img src="./images/respond-icon.svg" alt="respond" width="26" height="25">
+              <span class="user-name responded">Алексей_1994b</span>
+              <span class="date">23.04 15:46</span>
+            </div>
+          </div>
+          <p>Самое обидное когда сценарий по сути есть - в виде книг, где нет сюжетных дыр, всё логично, стройное
+            повествование и достаточно взять и экранизировать оригинал как это было в первых фильмах с минимальным количеством
+            отсебятины и зритель с восторгом примет любой такой фильм и сериал, однако вместо этого 'Кольца власти' просто
+            позаимствовали имена из оригинала, куски истории, мало связанные между собой и выдали очередной среднячковый
+            сериал на один раз в лучшем случае.</p>
+          <div class="reaction-container">
+        <span class="respond">
+          <img src="./images/respond-icon.svg" alt="respond" width="26" height="25">
+          <span>Ответить</span>
+        </span>
+            <span class="addToFav">
+          <img src="./images/likeHeart-not-filled.svg" alt="" width="30" height="28">
+          <span>В избранном</span>
+        </span>
+            <div class="likes-counter">
+              <div class="minus">-</div>
+              <span class="initial">0</span>
+              <div class="plus">+</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
