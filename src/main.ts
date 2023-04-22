@@ -5,7 +5,37 @@ type HTMLElements = {
     userName: HTMLSpanElement,
     avatar: HTMLImageElement,
     form: HTMLFormElement,
-    commentContainer: HTMLDivElement
+    commentContainer: HTMLDivElement,
+    favoritesNav: HTMLSpanElement,
+    commentsCounter: HTMLSpanElement
+}
+
+type commentDataTypes = {
+    id: number,
+    author: number,
+    timestamp: string,
+    text: string,
+    parent?: number | null,
+    addToFav: boolean,
+    likes: number
+}
+
+type appDataTypes = {
+    comments: Array<commentDataTypes>;
+    currentUser: number;
+}
+
+type commentaryTypes = {
+    author: User,
+    text: string,
+    app: App,
+    parent?: Commentary | null
+}
+
+function parseFromString(template: string) {
+    const parser = new DOMParser();
+
+    return parser.parseFromString(template, 'text/html').body.firstChild;
 }
 
 class App {
@@ -13,6 +43,7 @@ class App {
     users: { [key: number]: User };
     comments: { [key: number]: Commentary } = {};
     commentID: number = 0;
+    favorites: string = localStorage.getItem('addedToFav')!;
 
     usedElements: HTMLElements = {
         input: document.getElementById('input') as HTMLInputElement,
@@ -21,15 +52,23 @@ class App {
         userName: document.querySelector('.user-name') as HTMLSpanElement,
         avatar: document.querySelector('.avatar') as HTMLImageElement,
         form: document.querySelector('.input-container') as HTMLFormElement,
-        commentContainer: document.querySelector('.comments-container') as HTMLDivElement
+        commentContainer: document.querySelector('.comments-container') as HTMLDivElement,
+        favoritesNav: document.querySelector('.favorites') as HTMLSpanElement,
+        commentsCounter: document.querySelector('.comments-counter') as HTMLSpanElement
     }
 
     constructor(users: { [key: number]: User }) {
         this.users = users;
         this.currentUser = users[0];
+
+
         this.createUsersList();
         this.usedElements.input.oninput = this.setInputChangeHandler.bind(this);
         this.usedElements.form.onsubmit = this.handleSubmit.bind(this);
+        this.usedElements.favoritesNav.onclick = this.showFavorites.bind(this);
+
+        this.load();
+        this.renderAllComments();
     }
 
     createUsersList() {
@@ -55,39 +94,123 @@ class App {
         this.currentUser = user;
         this.usedElements.userName.innerHTML = `${this.currentUser.name}`;
         this.usedElements.avatar.setAttribute('src', `${this.currentUser.avatar}`);
+
+        const subCommentForm = document.querySelector('.subcomment-input');
+        if (subCommentForm) {
+            subCommentForm.children[0].setAttribute('src', `${user.avatar}`)
+        }
+
+        this.sendToLocalStorage();
     }
 
     setInputChangeHandler(e: Event) {
-            const target = e.currentTarget as HTMLTextAreaElement;
-            this.usedElements.counter.innerHTML = `${target.value.length}/1000`
+        const target = e.currentTarget as HTMLTextAreaElement;
+        this.usedElements.counter.innerHTML = `${target.value.length}/1000`
 
-           // target.style.height = 'auto';
-           // target.style.height = `${target.scrollHeight}px`;
+        // target.style.height = 'auto';
+        // target.style.height = `${target.scrollHeight}px`;
 
-            target.value.length > 0 ?
-                this.usedElements.button.classList.add('buttonActive') :
-                this.usedElements.button.classList.remove('buttonActive');
+        target.value.length > 0 ?
+            this.usedElements.button.classList.add('buttonActive') :
+            this.usedElements.button.classList.remove('buttonActive');
     }
 
     handleSubmit(e: SubmitEvent) {
         e.preventDefault();
 
         const newComment = new Commentary(
-            this.currentUser,
-            this.usedElements.input.value,
-            this
+            {
+                author: this.currentUser,
+                text: this.usedElements.input.value,
+                app: this
+            }
         )
 
         this.comments[newComment.id] = newComment;
         const newParsedComment = newComment.getNewHTML();
         this.usedElements.commentContainer.append(newParsedComment);
         this.usedElements.input.value = '';
+        this.usedElements.commentsCounter.innerHTML = `
+          <span class="comments-superscript">Комментарии</span> ${!this.commentID ? '(0)' : `(${this.commentID})`}
+        `;
         this.usedElements.counter.innerHTML = 'Макс. 1000 символов';
         this.usedElements.button.classList.remove('buttonActive');
         this.usedElements.commentContainer.scrollIntoView(false);
+        this.sendToLocalStorage();
+    }
+
+    showFavorites() {
+        console.log(this.favorites)
+        const parsedFavComs = JSON.parse(this.favorites);
+        console.log(parsedFavComs)
+        parsedFavComs.map((el: HTMLDivElement) => this.usedElements.commentContainer.innerHTML = `${el.innerHTML}`)
+
+    }
+
+     sendToLocalStorage() {
+        const commentsData = [];
+
+        // Collect all comments' data
+        for (const comment of Object.values(this.comments)) {
+            commentsData.push(comment.getData());
+        }
+
+        localStorage.setItem('comment_app', JSON.stringify({
+            comments: commentsData,
+            currentUser: this.currentUser.id,
+            commentID: this.commentID
+        }));
+    }
+
+     load() {
+        const stringData = localStorage.getItem('comment_app') as string;
+
+        if (!stringData) return;
+
+        const rawData: appDataTypes = JSON.parse(stringData);
+
+        // Convert comments data into real Commentary objects (without parents)
+        for (const commentData of Object.values(rawData.comments)) {
+            const commentary = new Commentary(
+                {
+                    author: this.users[commentData.author],
+                    text: commentData.text,
+                    app: this
+                }
+            );
+
+            commentary.setFavorite(commentData.addToFav);
+            commentary.setLikes(commentData.likes);
+
+            this.usedElements.commentsCounter.innerHTML = `
+              <span class="comments-superscript">Комментарии</span> ${!this.commentID ? '(0)' : `(${this.commentID})`}
+            `;
+
+            this.comments[commentary.id] = commentary;
+        }
+
+        for (const commentData of Object.values(rawData.comments)) {
+            if (typeof commentData.parent === 'number') {
+                this.comments[commentData.id].setParent(this.comments[commentData.parent]);
+            }
+        }
+         this.currentUser = this.users[rawData.currentUser];
+    }
+
+    renderAllComments() {
+        for (const comment of Object.values(this.comments)) {
+            if (comment.parent) {
+                const el = comment.getNewHTML(true) as HTMLDivElement;
+                const newCommentDiv = document.querySelector(`.comment[data-id="${comment.parent.id}"]`) as HTMLDivElement;
+                const parent = newCommentDiv.closest('.newCommentDiv') as HTMLDivElement;
+                parent.appendChild(el);
+            } else {
+                const el = comment.getNewHTML(false);
+                this.usedElements.commentContainer.append(el);
+            }
+        }
     }
 }
-
 class User {
     id: number;
     name: string;
@@ -97,15 +220,14 @@ class User {
         this.id = id;
         this.name = name;
         this.avatar = avatar;
-        this.getUserData()
     }
 
-    getUserData() {
+    public getData() {
         return {
             id: this.id,
             name: this.name,
             avatar: this.avatar
-        }
+        };
     }
 }
 
@@ -115,20 +237,31 @@ class Commentary {
     timestamp: Date;
     text: string;
     addToFav: boolean = false;
-    favorites: Array<Element> = [];
     likes: number = 0;
     app: App;
     parent?: Commentary | null;
-    newComment?: HTMLDivElement
+    newComment?: HTMLDivElement;
+    favsArr?: string[] = [];
 
-    constructor(author: User, text: string, app: App, parent?: Commentary) {
+    constructor({author, text, app, parent} : commentaryTypes) {
         this.author = author;
         this.text = text;
-        this.timestamp = new Date();
         this.app = app;
-        this.id = app.commentID;
         this.parent = parent;
-        this.handleCommentReply.bind(this);
+        this.id = app.commentID++;
+        this.timestamp = new Date();
+    }
+
+    setFavorite(isFavorite: boolean) {
+        this.addToFav = isFavorite
+    }
+
+    setLikes(likes: number) {
+        this.likes = likes;
+    }
+
+    setParent(parent: Commentary) {
+        this.parent = parent;
     }
 
     setNewTemplate(isReply: boolean = false) {
@@ -146,7 +279,7 @@ class Commentary {
 
         return `
               <div class="newCommentDiv">
-                 <div class="comment ${isReply ? 'active' : ''} ${this.addToFav ? 'addedToFav' : ''}">
+                 <div class="comment ${isReply ? 'active' : ''}" data-id="${this.id}">
                       <img src="${this.author.avatar}" alt="" width="61" height="61">
                       <div class="user-comment">
                         <div class=${isReply ? 'respondee-container' : ''}>
@@ -165,9 +298,9 @@ class Commentary {
                             <span>В избранное</span>
                           </span>
                           <div class="likes-counter">
-                            <div class="minus">-</div>
+                            <div class="minus" style="cursor: pointer; user-select: none">-</div>
                             <span class="initial">0</span>
-                            <div class="plus">+</div>
+                            <div class="plus" style="cursor: pointer; user-select: none">+</div>
                           </div>
                         </div>
                       </div>
@@ -186,8 +319,12 @@ class Commentary {
 
         replyButton.onclick = this.handleCommentReply.bind(this);
         heart.onclick = this.handleAddToFavorite.bind(this);
-        console.log(this.favorites)
-        favorites.onclick = this.showFavorites.bind(this);
+
+        const minus = this.newComment!.querySelector('.minus') as HTMLDivElement;
+        const plus = this.newComment!.querySelector('.plus') as HTMLDivElement;
+
+        minus.onclick = this.handleLikeClicks.bind(this);
+        plus.onclick = this.handleLikeClicks.bind(this);
 
         return this.newComment;
     }
@@ -208,45 +345,65 @@ class Commentary {
 
         replyInput.onsubmit = () => {
             const newReplyComment = new Commentary(
-                this.app.currentUser,
-                input.value,
-                this.app,
-                this
+                {
+                    author: this.app.currentUser,
+                    text: input.value,
+                    app: this.app,
+                    parent: this
+                }
             )
             this.app.comments[newReplyComment.id] = newReplyComment;
 
             replyInput.replaceWith(newReplyComment.getNewHTML(true));
-
-            this.newComment?.scrollIntoView(false);
+            this.app.sendToLocalStorage();
         }
+
+        this.newComment?.scrollIntoView(false);
+        return replyInput;
     }
 
     handleAddToFavorite() {
         this.addToFav = !this.addToFav;
         const favText = this.newComment!.querySelector('.addToFav span') as HTMLSpanElement;
         const heartImg = this.newComment!.querySelector('.addToFav img') as HTMLImageElement;
-        const newCommentDiv = this.newComment!.querySelector('.comment') as HTMLDivElement;
+        const newCommentDiv = this.newComment!.querySelector('.newCommentDiv') as HTMLDivElement;
 
         favText.innerHTML = this.addToFav ? 'В избранном' : 'В избранное';
         heartImg.src = this.addToFav ? './images/heart.svg' : './images/likeHeart-not-filled.svg';
 
-        if (this.addToFav) {
-            this.favorites.push(this.newComment!)
-        }
+        this.app.sendToLocalStorage();
+        // this.favsArr?.push(this.newComment!.innerHTML);
+        // const favsArrCopy = [...this.favsArr!];
+        // const stringFavsArr = JSON.stringify(favsArrCopy);
+        // localStorage.setItem('addedToFav', `${stringFavsArr}`)
 
     }
 
-    showFavorites() {
-        const newCommentDiv = this.newComment!.querySelectorAll('.addedToFav') as NodeListOf<Element>;
+    handleLikeClicks(e: MouseEvent) {
+        const target = e.currentTarget as HTMLDivElement;
+        const likesCounter = this.newComment!.querySelector('.initial') as HTMLDivElement;
 
-        for (let el of newCommentDiv) {
-            console.log(el)
+        if (target.classList.contains('minus')) {
+            likesCounter.innerHTML = String(Number(likesCounter.innerHTML) - 1);
+        } else {
+            likesCounter.innerHTML = String(Number(likesCounter.innerHTML) + 1);
         }
+
+        this.likes = Number(likesCounter.innerHTML);
+        this.app.sendToLocalStorage();
+    }
+
+    public getData() {
+        return {
+            id: this.id,
+            author: this.author.id,
+            timestamp: this.timestamp.toString(),
+            text: this.text,
+            parent: this.parent ? this.parent.id : null,
+            favorite: this.addToFav,
+            likes: this.likes
+        };
     }
 }
 
-function parseFromString(template: string) {
-    const parser = new DOMParser();
 
-    return parser.parseFromString(template, 'text/html').body.firstChild;
-}
