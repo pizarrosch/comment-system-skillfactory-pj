@@ -7,7 +7,8 @@ type HTMLElements = {
     form: HTMLFormElement,
     commentContainer: HTMLDivElement,
     favoritesNav: HTMLSpanElement,
-    commentsCounter: HTMLSpanElement
+    commentsCounter: HTMLSpanElement,
+    dropdown: HTMLSelectElement
 }
 
 type commentDataTypes = {
@@ -16,7 +17,7 @@ type commentDataTypes = {
     timestamp: string,
     text: string,
     parent?: number | null,
-    addToFav: boolean,
+    favorite: boolean,
     likes: number
 }
 
@@ -29,8 +30,11 @@ type commentaryTypes = {
     author: User,
     text: string,
     app: App,
-    parent?: Commentary | null
+    parent?: Commentary | null,
 }
+
+type Filter = 'all' | 'favorites';
+type Order = 'none' | 'likes' | 'date' | 'responses';
 
 function parseFromString(template: string) {
     const parser = new DOMParser();
@@ -43,7 +47,8 @@ class App {
     users: { [key: number]: User };
     comments: { [key: number]: Commentary } = {};
     commentID: number = 0;
-    favorites: string = localStorage.getItem('addedToFav')!;
+    filter: Filter = 'all';
+    order: Order = 'none';
 
     usedElements: HTMLElements = {
         input: document.getElementById('input') as HTMLInputElement,
@@ -54,25 +59,30 @@ class App {
         form: document.querySelector('.input-container') as HTMLFormElement,
         commentContainer: document.querySelector('.comments-container') as HTMLDivElement,
         favoritesNav: document.querySelector('.favorites') as HTMLSpanElement,
-        commentsCounter: document.querySelector('.comments-counter') as HTMLSpanElement
+        commentsCounter: document.querySelector('.comments-counter') as HTMLSpanElement,
+        dropdown: document.querySelector('.dropbox') as HTMLSelectElement
     }
 
     constructor(users: { [key: number]: User }) {
         this.users = users;
         this.currentUser = users[0];
 
-
-        this.createUsersList();
-        this.usedElements.input.oninput = this.setInputChangeHandler.bind(this);
-        this.usedElements.form.onsubmit = this.handleSubmit.bind(this);
-        this.usedElements.favoritesNav.onclick = this.showFavorites.bind(this);
-
         this.load();
         this.renderAllComments();
+        this.createUsersList();
+
+        this.usedElements.input.oninput = this.setInputChangeHandler.bind(this);
+        this.usedElements.form.onsubmit = this.handleSubmit.bind(this);
+        // this.sortComments.bind(this)();
+        this.usedElements.favoritesNav.onclick = this.showFavorites.bind(this);
+        this.usedElements.commentsCounter.onclick = this.showAll.bind(this);
+        this.usedElements.dropdown.onchange = this.setOrder.bind(this);
     }
 
     createUsersList() {
         const usersList = document.querySelector('.chooseUsers') as HTMLDivElement;
+
+        usersList.innerHTML = '';
 
         for (let [key, user] of Object.entries(this.users)) {
             const newUser = parseFromString(`
@@ -100,19 +110,33 @@ class App {
             subCommentForm.children[0].setAttribute('src', `${user.avatar}`)
         }
 
+        this.createUsersList();
         this.sendToLocalStorage();
     }
 
     setInputChangeHandler(e: Event) {
+        const errorMessage = document.querySelector('.error-message') as HTMLSpanElement;
         const target = e.currentTarget as HTMLTextAreaElement;
         this.usedElements.counter.innerHTML = `${target.value.length}/1000`
+
+        if (target.value.length > 1000) {
+            this.usedElements.counter.style.color = 'red';
+            errorMessage.style.display = 'block';
+            this.usedElements.button.setAttribute('disabled', '');
+            this.usedElements.button.classList.remove('buttonActive')
+        } else if (target.value.length > 0) {
+            this.usedElements.counter.style.color = '#A1A1A1';
+            errorMessage.style.display = 'none';
+            this.usedElements.button.removeAttribute('disabled');
+            this.usedElements.button.classList.add('buttonActive')
+        }
 
         // target.style.height = 'auto';
         // target.style.height = `${target.scrollHeight}px`;
 
-        target.value.length > 0 ?
-            this.usedElements.button.classList.add('buttonActive') :
-            this.usedElements.button.classList.remove('buttonActive');
+        // target.value.length > 0 && target.value.length < 11?
+        //     this.usedElements.button.classList.add('buttonActive') :
+        //     this.usedElements.button.classList.remove('buttonActive');
     }
 
     handleSubmit(e: SubmitEvent) {
@@ -129,6 +153,8 @@ class App {
         this.comments[newComment.id] = newComment;
         const newParsedComment = newComment.getNewHTML();
         this.usedElements.commentContainer.append(newParsedComment);
+
+        this.sendToLocalStorage();
         this.usedElements.input.value = '';
         this.usedElements.commentsCounter.innerHTML = `
           <span class="comments-superscript">Комментарии</span> ${!this.commentID ? '(0)' : `(${this.commentID})`}
@@ -136,21 +162,40 @@ class App {
         this.usedElements.counter.innerHTML = 'Макс. 1000 символов';
         this.usedElements.button.classList.remove('buttonActive');
         this.usedElements.commentContainer.scrollIntoView(false);
-        this.sendToLocalStorage();
     }
+    //
+    // sortComments() {
+    //     const dropdownMenu = document.querySelector('.dropbox') as HTMLSelectElement;
+    //     dropdownMenu.onchange = (e) => {
+    //         const target =  e.target as HTMLOptionElement;
+    //         if (target.value === 'likesNumber') {
+    //            Object.values(this.comments).sort((a: Commentary, b: Commentary) => {
+    //                return b.likes - a.likes
+    //            })
+    //         }
+    //     }
+    // }
 
     showFavorites() {
-        console.log(this.favorites)
-        const parsedFavComs = JSON.parse(this.favorites);
-        console.log(parsedFavComs)
-        parsedFavComs.map((el: HTMLDivElement) => this.usedElements.commentContainer.innerHTML = `${el.innerHTML}`)
+        this.filter = 'favorites';
+        this.renderAllComments();
+    }
 
+    showAll() {
+        this.filter = 'all';
+        this.renderAllComments();
+    }
+
+    setOrder(e: Event) {
+        const target = e.currentTarget as HTMLOptionElement;
+        this.order = target.value as Order;
+        console.log(this.order)
+        this.renderAllComments();
     }
 
      sendToLocalStorage() {
-        const commentsData = [];
+        let commentsData = [];
 
-        // Collect all comments' data
         for (const comment of Object.values(this.comments)) {
             commentsData.push(comment.getData());
         }
@@ -158,18 +203,16 @@ class App {
         localStorage.setItem('comment_app', JSON.stringify({
             comments: commentsData,
             currentUser: this.currentUser.id,
-            commentID: this.commentID
+            commentID: this.commentID,
         }));
     }
 
      load() {
         const stringData = localStorage.getItem('comment_app') as string;
-
         if (!stringData) return;
 
         const rawData: appDataTypes = JSON.parse(stringData);
 
-        // Convert comments data into real Commentary objects (without parents)
         for (const commentData of Object.values(rawData.comments)) {
             const commentary = new Commentary(
                 {
@@ -179,14 +222,10 @@ class App {
                 }
             );
 
-            commentary.setFavorite(commentData.addToFav);
-            commentary.setLikes(commentData.likes);
-
-            this.usedElements.commentsCounter.innerHTML = `
-              <span class="comments-superscript">Комментарии</span> ${!this.commentID ? '(0)' : `(${this.commentID})`}
-            `;
-
             this.comments[commentary.id] = commentary;
+            this.comments[commentData.id].isFavorite = commentData.favorite
+            this.comments[commentData.id].likes = commentData.likes
+            this.comments[commentData.id].timestamp = new Date(commentData.timestamp)
         }
 
         for (const commentData of Object.values(rawData.comments)) {
@@ -194,11 +233,59 @@ class App {
                 this.comments[commentData.id].setParent(this.comments[commentData.parent]);
             }
         }
+
+         this.usedElements.favoritesNav.onclick = () => {
+             rawData.comments.filter((favComment, id) => {
+                     this.commentID = id;
+                     rawData.comments[id].favorite ? console.log('I am fav!'): ''
+                 }
+             )
+         }
          this.currentUser = this.users[rawData.currentUser];
+         this.usedElements.commentsCounter.innerHTML = `
+              <span class="comments-superscript">Комментарии</span> (${rawData.comments.length})
+            `;
+
+    }
+
+    sortByDate(a: Commentary, b: Commentary) {
+        return 0;
+    }
+    sortByLikes(a: Commentary, b: Commentary) {
+        return b.likes - a.likes;
+    }
+    sortByResponses(a: Commentary, b: Commentary) {
+        return b.children.length - a.children.length;
     }
 
     renderAllComments() {
-        for (const comment of Object.values(this.comments)) {
+        this.usedElements.commentContainer.innerHTML = '';
+
+        let sorter;
+
+        switch (this.order) {
+            case "date": sorter = this.sortByDate;
+                break;
+            case "likes": sorter = this.sortByLikes;
+                break;
+            case "responses": sorter = this.sortByResponses;
+                break;
+            case "none": sorter = () => 0;
+        }
+
+        let sorted;
+
+        if (this.order === 'none') {
+            sorted = Object.values(this.comments);
+        } else {
+            sorted = Object.values(this.comments).sort(sorter);
+        }
+
+        for (const comment of sorted) {
+            if (this.filter === 'favorites' && !comment.isFavorite) {
+                continue;
+            }
+
             if (comment.parent) {
                 const el = comment.getNewHTML(true) as HTMLDivElement;
                 const newCommentDiv = document.querySelector(`.comment[data-id="${comment.parent.id}"]`) as HTMLDivElement;
@@ -211,6 +298,7 @@ class App {
         }
     }
 }
+
 class User {
     id: number;
     name: string;
@@ -236,12 +324,12 @@ class Commentary {
     author: User;
     timestamp: Date;
     text: string;
-    addToFav: boolean = false;
+    isFavorite: boolean = false;
     likes: number = 0;
     app: App;
     parent?: Commentary | null;
+    children: Array<Commentary> = [];
     newComment?: HTMLDivElement;
-    favsArr?: string[] = [];
 
     constructor({author, text, app, parent} : commentaryTypes) {
         this.author = author;
@@ -250,14 +338,6 @@ class Commentary {
         this.parent = parent;
         this.id = app.commentID++;
         this.timestamp = new Date();
-    }
-
-    setFavorite(isFavorite: boolean) {
-        this.addToFav = isFavorite
-    }
-
-    setLikes(likes: number) {
-        this.likes = likes;
     }
 
     setParent(parent: Commentary) {
@@ -294,12 +374,18 @@ class Commentary {
                             <span>Ответить</span>
                           </span>
                           <span class="addToFav">
-                            <img src='./images/likeHeart-not-filled.svg' alt="" width="30" height="28">
-                            <span>В избранное</span>
+                            ${this.isFavorite ? 
+                                `<img src='./images/heart.svg' alt="" width="30" height="28">` : 
+                                `<img src='./images/likeHeart-not-filled.svg' alt="" width="30" height="28">`
+                            }
+                            ${this.isFavorite ?
+                                `<span>В избранном</span>` :
+                                `<span>В избранное</span>`
+                            }
                           </span>
                           <div class="likes-counter">
                             <div class="minus" style="cursor: pointer; user-select: none">-</div>
-                            <span class="initial">0</span>
+                            <span class="initial">${this.likes}</span>
                             <div class="plus" style="cursor: pointer; user-select: none">+</div>
                           </div>
                         </div>
@@ -352,6 +438,7 @@ class Commentary {
                     parent: this
                 }
             )
+            this.children.push(newReplyComment);
             this.app.comments[newReplyComment.id] = newReplyComment;
 
             replyInput.replaceWith(newReplyComment.getNewHTML(true));
@@ -363,20 +450,14 @@ class Commentary {
     }
 
     handleAddToFavorite() {
-        this.addToFav = !this.addToFav;
         const favText = this.newComment!.querySelector('.addToFav span') as HTMLSpanElement;
         const heartImg = this.newComment!.querySelector('.addToFav img') as HTMLImageElement;
-        const newCommentDiv = this.newComment!.querySelector('.newCommentDiv') as HTMLDivElement;
 
-        favText.innerHTML = this.addToFav ? 'В избранном' : 'В избранное';
-        heartImg.src = this.addToFav ? './images/heart.svg' : './images/likeHeart-not-filled.svg';
+        this.isFavorite = !this.isFavorite;
+        this.isFavorite ? favText.innerHTML =  'В избранном' : favText.innerHTML = 'В избранное';
+        this.isFavorite ? heartImg.src =  './images/heart.svg' : heartImg.src = './images/likeHeart-not-filled.svg';
 
         this.app.sendToLocalStorage();
-        // this.favsArr?.push(this.newComment!.innerHTML);
-        // const favsArrCopy = [...this.favsArr!];
-        // const stringFavsArr = JSON.stringify(favsArrCopy);
-        // localStorage.setItem('addedToFav', `${stringFavsArr}`)
-
     }
 
     handleLikeClicks(e: MouseEvent) {
@@ -393,14 +474,14 @@ class Commentary {
         this.app.sendToLocalStorage();
     }
 
-    public getData() {
+    getData() {
         return {
             id: this.id,
             author: this.author.id,
             timestamp: this.timestamp.toString(),
             text: this.text,
             parent: this.parent ? this.parent.id : null,
-            favorite: this.addToFav,
+            favorite: this.isFavorite,
             likes: this.likes
         };
     }
