@@ -7,8 +7,9 @@ type HTMLElements = {
     form: HTMLFormElement,
     commentContainer: HTMLDivElement,
     favoritesNav: HTMLSpanElement,
-    commentsCounter: HTMLSpanElement,
-    dropdown: HTMLSelectElement
+    commentsCounter: HTMLSpanElement;
+    dropdown: HTMLSelectElement;
+    triangle: HTMLDivElement
 }
 
 type commentDataTypes = {
@@ -34,7 +35,10 @@ type commentaryTypes = {
 }
 
 type Filter = 'all' | 'favorites';
+
 type Order = 'none' | 'likes' | 'date' | 'responses';
+
+type SortOrder = 'ASC' | 'DESC';
 
 function parseFromString(template: string) {
     const parser = new DOMParser();
@@ -48,7 +52,8 @@ class App {
     comments: { [key: number]: Commentary } = {};
     commentID: number = 0;
     filter: Filter = 'all';
-    order: Order = 'none';
+    order: Order = 'likes';
+    sortOrder: SortOrder = "ASC";
 
     usedElements: HTMLElements = {
         input: document.getElementById('input') as HTMLInputElement,
@@ -60,7 +65,8 @@ class App {
         commentContainer: document.querySelector('.comments-container') as HTMLDivElement,
         favoritesNav: document.querySelector('.favorites') as HTMLSpanElement,
         commentsCounter: document.querySelector('.comments-counter') as HTMLSpanElement,
-        dropdown: document.querySelector('.dropbox') as HTMLSelectElement
+        dropdown: document.querySelector('.dropbox') as HTMLSelectElement,
+        triangle: document.querySelector('.triangle') as HTMLDivElement
     }
 
     constructor(users: { [key: number]: User }) {
@@ -73,10 +79,16 @@ class App {
 
         this.usedElements.input.oninput = this.setInputChangeHandler.bind(this);
         this.usedElements.form.onsubmit = this.handleSubmit.bind(this);
-        // this.sortComments.bind(this)();
         this.usedElements.favoritesNav.onclick = this.showFavorites.bind(this);
         this.usedElements.commentsCounter.onclick = this.showAll.bind(this);
         this.usedElements.dropdown.onchange = this.setOrder.bind(this);
+
+        // Set handler to the filter sort order triangle
+        this.usedElements.triangle.onclick = () => {
+            this.usedElements.triangle.classList.toggle('up');
+            this.sortOrder = this.sortOrder === 'ASC' ? 'DESC' : 'ASC';
+            this.renderAllComments();
+        }
     }
 
     createUsersList() {
@@ -130,13 +142,6 @@ class App {
             this.usedElements.button.removeAttribute('disabled');
             this.usedElements.button.classList.add('buttonActive')
         }
-
-        // target.style.height = 'auto';
-        // target.style.height = `${target.scrollHeight}px`;
-
-        // target.value.length > 0 && target.value.length < 11?
-        //     this.usedElements.button.classList.add('buttonActive') :
-        //     this.usedElements.button.classList.remove('buttonActive');
     }
 
     handleSubmit(e: SubmitEvent) {
@@ -163,18 +168,6 @@ class App {
         this.usedElements.button.classList.remove('buttonActive');
         this.usedElements.commentContainer.scrollIntoView(false);
     }
-    //
-    // sortComments() {
-    //     const dropdownMenu = document.querySelector('.dropbox') as HTMLSelectElement;
-    //     dropdownMenu.onchange = (e) => {
-    //         const target =  e.target as HTMLOptionElement;
-    //         if (target.value === 'likesNumber') {
-    //            Object.values(this.comments).sort((a: Commentary, b: Commentary) => {
-    //                return b.likes - a.likes
-    //            })
-    //         }
-    //     }
-    // }
 
     showFavorites() {
         this.filter = 'favorites';
@@ -189,11 +182,10 @@ class App {
     setOrder(e: Event) {
         const target = e.currentTarget as HTMLOptionElement;
         this.order = target.value as Order;
-        console.log(this.order)
         this.renderAllComments();
     }
 
-     sendToLocalStorage() {
+    sendToLocalStorage() {
         let commentsData = [];
 
         for (const comment of Object.values(this.comments)) {
@@ -207,7 +199,7 @@ class App {
         }));
     }
 
-     load() {
+    load() {
         const stringData = localStorage.getItem('comment_app') as string;
         if (!stringData) return;
 
@@ -234,28 +226,39 @@ class App {
             }
         }
 
-         this.usedElements.favoritesNav.onclick = () => {
-             rawData.comments.filter((favComment, id) => {
-                     this.commentID = id;
-                     rawData.comments[id].favorite ? console.log('I am fav!'): ''
-                 }
-             )
-         }
-         this.currentUser = this.users[rawData.currentUser];
-         this.usedElements.commentsCounter.innerHTML = `
+        this.currentUser = this.users[rawData.currentUser];
+        this.usedElements.commentsCounter.innerHTML = `
               <span class="comments-superscript">Комментарии</span> (${rawData.comments.length})
             `;
 
+        // Create comment-children relationship
+        for (const comment of Object.values(this.comments)) {
+            if (comment.parent) {
+                comment.parent.children.push(comment);
+            }
+        }
     }
 
     sortByDate(a: Commentary, b: Commentary) {
-        return 0;
+        const x = this.sortOrder === 'ASC' ? b : a;
+        const y = this.sortOrder === 'ASC' ? a : b;
+
+        // @ts-ignore // Date arithmetics is a valid operation
+        return x.timestamp - y.timestamp;
     }
+
     sortByLikes(a: Commentary, b: Commentary) {
-        return b.likes - a.likes;
+        const x = this.sortOrder === 'ASC' ? b : a;
+        const y = this.sortOrder === 'ASC' ? a : b;
+
+        return x.likes - y.likes;
     }
+
     sortByResponses(a: Commentary, b: Commentary) {
-        return b.children.length - a.children.length;
+        const x = this.sortOrder === 'ASC' ? b : a;
+        const y = this.sortOrder === 'ASC' ? a : b;
+
+        return x.children.length - y.children.length;
     }
 
     renderAllComments() {
@@ -264,13 +267,15 @@ class App {
         let sorter;
 
         switch (this.order) {
-            case "date": sorter = this.sortByDate;
+            case "date":
+                sorter = this.sortByDate.bind(this);
                 break;
-            case "likes": sorter = this.sortByLikes;
+            case "likes":
+                sorter = this.sortByLikes.bind(this);
                 break;
-            case "responses": sorter = this.sortByResponses;
+            case "responses":
+                sorter = this.sortByResponses.bind(this);
                 break;
-            case "none": sorter = () => 0;
         }
 
         let sorted;
@@ -281,6 +286,19 @@ class App {
             sorted = Object.values(this.comments).sort(sorter);
         }
 
+        // First render parent comments
+        for (const comment of sorted) {
+            if (this.filter === 'favorites' && !comment.isFavorite) {
+                continue;
+            }
+
+            if (!comment.parent) {
+                const el = comment.getNewHTML(false);
+                this.usedElements.commentContainer.append(el);
+            }
+        }
+
+        // Then render children comments
         for (const comment of sorted) {
             if (this.filter === 'favorites' && !comment.isFavorite) {
                 continue;
@@ -291,9 +309,6 @@ class App {
                 const newCommentDiv = document.querySelector(`.comment[data-id="${comment.parent.id}"]`) as HTMLDivElement;
                 const parent = newCommentDiv.closest('.newCommentDiv') as HTMLDivElement;
                 parent.appendChild(el);
-            } else {
-                const el = comment.getNewHTML(false);
-                this.usedElements.commentContainer.append(el);
             }
         }
     }
@@ -331,7 +346,7 @@ class Commentary {
     children: Array<Commentary> = [];
     newComment?: HTMLDivElement;
 
-    constructor({author, text, app, parent} : commentaryTypes) {
+    constructor({author, text, app, parent}: commentaryTypes) {
         this.author = author;
         this.text = text;
         this.app = app;
@@ -374,14 +389,14 @@ class Commentary {
                             <span>Ответить</span>
                           </span>
                           <span class="addToFav">
-                            ${this.isFavorite ? 
-                                `<img src='./images/heart.svg' alt="" width="30" height="28">` : 
-                                `<img src='./images/likeHeart-not-filled.svg' alt="" width="30" height="28">`
-                            }
                             ${this.isFavorite ?
-                                `<span>В избранном</span>` :
-                                `<span>В избранное</span>`
-                            }
+            `<img src='./images/heart.svg' alt="" width="30" height="28">` :
+            `<img src='./images/likeHeart-not-filled.svg' alt="" width="30" height="28">`
+        }
+                            ${this.isFavorite ?
+            `<span>В избранном</span>` :
+            `<span>В избранное</span>`
+        }
                           </span>
                           <div class="likes-counter">
                             <div class="minus" style="cursor: pointer; user-select: none">-</div>
@@ -454,8 +469,8 @@ class Commentary {
         const heartImg = this.newComment!.querySelector('.addToFav img') as HTMLImageElement;
 
         this.isFavorite = !this.isFavorite;
-        this.isFavorite ? favText.innerHTML =  'В избранном' : favText.innerHTML = 'В избранное';
-        this.isFavorite ? heartImg.src =  './images/heart.svg' : heartImg.src = './images/likeHeart-not-filled.svg';
+        this.isFavorite ? favText.innerHTML = 'В избранном' : favText.innerHTML = 'В избранное';
+        this.isFavorite ? heartImg.src = './images/heart.svg' : heartImg.src = './images/likeHeart-not-filled.svg';
 
         this.app.sendToLocalStorage();
     }
@@ -471,6 +486,7 @@ class Commentary {
         }
 
         this.likes = Number(likesCounter.innerHTML);
+        console.log(this.likes)
         this.app.sendToLocalStorage();
     }
 
@@ -481,9 +497,14 @@ class Commentary {
             timestamp: this.timestamp.toString(),
             text: this.text,
             parent: this.parent ? this.parent.id : null,
+            children: this.getChildrenIds(),
             favorite: this.isFavorite,
             likes: this.likes
         };
+    }
+
+    getChildrenIds() {
+        return this.children.map((child) => child.id);
     }
 }
 

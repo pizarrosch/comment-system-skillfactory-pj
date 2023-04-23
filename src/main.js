@@ -8,7 +8,8 @@ class App {
         this.comments = {};
         this.commentID = 0;
         this.filter = 'all';
-        this.order = 'none';
+        this.order = 'likes';
+        this.sortOrder = "ASC";
         this.usedElements = {
             input: document.getElementById('input'),
             counter: document.querySelector('.counter'),
@@ -19,7 +20,8 @@ class App {
             commentContainer: document.querySelector('.comments-container'),
             favoritesNav: document.querySelector('.favorites'),
             commentsCounter: document.querySelector('.comments-counter'),
-            dropdown: document.querySelector('.dropbox')
+            dropdown: document.querySelector('.dropbox'),
+            triangle: document.querySelector('.triangle')
         };
         this.users = users;
         this.currentUser = users[0];
@@ -28,10 +30,15 @@ class App {
         this.createUsersList();
         this.usedElements.input.oninput = this.setInputChangeHandler.bind(this);
         this.usedElements.form.onsubmit = this.handleSubmit.bind(this);
-        // this.sortComments.bind(this)();
         this.usedElements.favoritesNav.onclick = this.showFavorites.bind(this);
         this.usedElements.commentsCounter.onclick = this.showAll.bind(this);
         this.usedElements.dropdown.onchange = this.setOrder.bind(this);
+        // Set handler to the filter sort order triangle
+        this.usedElements.triangle.onclick = () => {
+            this.usedElements.triangle.classList.toggle('up');
+            this.sortOrder = this.sortOrder === 'ASC' ? 'DESC' : 'ASC';
+            this.renderAllComments();
+        };
     }
     createUsersList() {
         const usersList = document.querySelector('.chooseUsers');
@@ -76,11 +83,6 @@ class App {
             this.usedElements.button.removeAttribute('disabled');
             this.usedElements.button.classList.add('buttonActive');
         }
-        // target.style.height = 'auto';
-        // target.style.height = `${target.scrollHeight}px`;
-        // target.value.length > 0 && target.value.length < 11?
-        //     this.usedElements.button.classList.add('buttonActive') :
-        //     this.usedElements.button.classList.remove('buttonActive');
     }
     handleSubmit(e) {
         e.preventDefault();
@@ -101,18 +103,6 @@ class App {
         this.usedElements.button.classList.remove('buttonActive');
         this.usedElements.commentContainer.scrollIntoView(false);
     }
-    //
-    // sortComments() {
-    //     const dropdownMenu = document.querySelector('.dropbox') as HTMLSelectElement;
-    //     dropdownMenu.onchange = (e) => {
-    //         const target =  e.target as HTMLOptionElement;
-    //         if (target.value === 'likesNumber') {
-    //            Object.values(this.comments).sort((a: Commentary, b: Commentary) => {
-    //                return b.likes - a.likes
-    //            })
-    //         }
-    //     }
-    // }
     showFavorites() {
         this.filter = 'favorites';
         this.renderAllComments();
@@ -124,7 +114,6 @@ class App {
     setOrder(e) {
         const target = e.currentTarget;
         this.order = target.value;
-        console.log(this.order);
         this.renderAllComments();
     }
     sendToLocalStorage() {
@@ -159,40 +148,46 @@ class App {
                 this.comments[commentData.id].setParent(this.comments[commentData.parent]);
             }
         }
-        this.usedElements.favoritesNav.onclick = () => {
-            rawData.comments.filter((favComment, id) => {
-                this.commentID = id;
-                rawData.comments[id].favorite ? console.log('I am fav!') : '';
-            });
-        };
         this.currentUser = this.users[rawData.currentUser];
         this.usedElements.commentsCounter.innerHTML = `
               <span class="comments-superscript">Комментарии</span> (${rawData.comments.length})
             `;
+        // Create comment-children relationship
+        for (const comment of Object.values(this.comments)) {
+            if (comment.parent) {
+                comment.parent.children.push(comment);
+            }
+        }
     }
     sortByDate(a, b) {
-        return 0;
+        const x = this.sortOrder === 'ASC' ? b : a;
+        const y = this.sortOrder === 'ASC' ? a : b;
+        // @ts-ignore // Date arithmetics is a valid operation
+        return x.timestamp - y.timestamp;
     }
     sortByLikes(a, b) {
-        return b.likes - a.likes;
+        const x = this.sortOrder === 'ASC' ? b : a;
+        const y = this.sortOrder === 'ASC' ? a : b;
+        return x.likes - y.likes;
     }
     sortByResponses(a, b) {
-        return b.children.length - a.children.length;
+        const x = this.sortOrder === 'ASC' ? b : a;
+        const y = this.sortOrder === 'ASC' ? a : b;
+        return x.children.length - y.children.length;
     }
     renderAllComments() {
         this.usedElements.commentContainer.innerHTML = '';
         let sorter;
         switch (this.order) {
             case "date":
-                sorter = this.sortByDate;
+                sorter = this.sortByDate.bind(this);
                 break;
             case "likes":
-                sorter = this.sortByLikes;
+                sorter = this.sortByLikes.bind(this);
                 break;
             case "responses":
-                sorter = this.sortByResponses;
+                sorter = this.sortByResponses.bind(this);
                 break;
-            case "none": sorter = () => 0;
         }
         let sorted;
         if (this.order === 'none') {
@@ -201,6 +196,17 @@ class App {
         else {
             sorted = Object.values(this.comments).sort(sorter);
         }
+        // First render parent comments
+        for (const comment of sorted) {
+            if (this.filter === 'favorites' && !comment.isFavorite) {
+                continue;
+            }
+            if (!comment.parent) {
+                const el = comment.getNewHTML(false);
+                this.usedElements.commentContainer.append(el);
+            }
+        }
+        // Then render children comments
         for (const comment of sorted) {
             if (this.filter === 'favorites' && !comment.isFavorite) {
                 continue;
@@ -210,10 +216,6 @@ class App {
                 const newCommentDiv = document.querySelector(`.comment[data-id="${comment.parent.id}"]`);
                 const parent = newCommentDiv.closest('.newCommentDiv');
                 parent.appendChild(el);
-            }
-            else {
-                const el = comment.getNewHTML(false);
-                this.usedElements.commentContainer.append(el);
             }
         }
     }
@@ -352,6 +354,7 @@ class Commentary {
             likesCounter.innerHTML = String(Number(likesCounter.innerHTML) + 1);
         }
         this.likes = Number(likesCounter.innerHTML);
+        console.log(this.likes);
         this.app.sendToLocalStorage();
     }
     getData() {
@@ -361,8 +364,12 @@ class Commentary {
             timestamp: this.timestamp.toString(),
             text: this.text,
             parent: this.parent ? this.parent.id : null,
+            children: this.getChildrenIds(),
             favorite: this.isFavorite,
             likes: this.likes
         };
+    }
+    getChildrenIds() {
+        return this.children.map((child) => child.id);
     }
 }

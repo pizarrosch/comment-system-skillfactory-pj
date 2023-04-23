@@ -18,17 +18,22 @@
   <hr>
   <div class="filter-container">
     <span class="comments-counter"><span class="comments-superscript">Комментарии</span> (0)</span>
-    <div class="dropdown-container">
-      <div class="select-container">
-        <select class="dropbox">
-          <option value="date">По дате</option>
-          <option value="likes">По количеству оценок</option>
-          <option value="none">По актуальности</option>
-          <option value="responses">По количеству ответов</option>
-        </select>
+    <div class="wrapper">
+      <div class="dropdown-container">
+        <div class="select-container">
+          <select class="dropbox">
+            <option value="date">По дате</option>
+            <option value="likes" selected>По количеству оценок</option>
+            <option value="none">По актуальности</option>
+            <option value="responses">По количеству ответов</option>
+          </select>
+          <div class="triangle"></div>
+        </div>
       </div>
-      <div class="triangle"></div>
-      <span class="favorites">Избранное <img src="./images/heart.svg" alt="heart" class="heart-image"></span>
+      <span class="favorites-wrapper">
+        <span class="favorites">Избранное</span>
+        <img src="./images/heart.svg" alt="heart" class="heart-image">
+      </span>
     </div>
   </div>
   <form class="input-container">
@@ -49,6 +54,7 @@
 </body>
 
 <script defer>
+  // Store users in an object instead of an array to easier find them by id
   const users = {
     0: new User(0, 'Максим Авдеенко', './images/user_1.png'),
     1: new User(1, 'Алексей_1994b', './images/user_2.png'),
